@@ -1,0 +1,23 @@
+{
+    "name": "pentagonal/profier",
+    "description": "Simple PHP",
+    "type": "project",
+    "require": {
+        "php": ">=5.5",
+        "league/oauth2-google": "~1",
+        "pentagonal/phpass": "^1.0",
+        "pentagonal/statichelper": "dev-master",
+        "aufa/encryption": "1.0",
+        "phpmailer/phpmailer": "^5.2",
+        "doctrine/dbal": "^2.5",
+        "predis/predis": "^1",
+        "monolog/monolog": "^1"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "nawa",
+            "email": "nawa@yahoo.com"
+        }
+    ]
+}
