@@ -7,5 +7,5 @@ namespace Pentagonal\Profier\Exceptions;
  */
 class DBException extends \Exception
 {
-
+    // annotation
 }
