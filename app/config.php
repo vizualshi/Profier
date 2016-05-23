@@ -9,6 +9,7 @@ return [
         'user' => 'root',
         'password' => 'mysql',
         'dbname' => 'chat',
+        'driver' => 'pdo_mysql',
     ],
     'cookie' => [
         'name' => 'chat',
