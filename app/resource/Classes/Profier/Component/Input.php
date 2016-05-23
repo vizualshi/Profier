@@ -10,4 +10,5 @@ use Pentagonal\Profier\Abstracts\Factory\InputFactory;
  */
 class Input extends InputFactory
 {
+    // annotation
 }

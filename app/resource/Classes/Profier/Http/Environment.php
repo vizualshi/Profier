@@ -3,6 +3,10 @@ namespace Pentagonal\Profier\Http;
 
 use Pentagonal\Profier\Collector;
 
+/**
+ * Class Environment
+ * @package Pentagonal\Profier\Http
+ */
 class Environment extends Collector
 {
     public static function create(array $data = [])

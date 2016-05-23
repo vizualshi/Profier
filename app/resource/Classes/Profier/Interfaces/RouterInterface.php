@@ -1,6 +1,10 @@
 <?php
 namespace Pentagonal\Profier\Interfaces;
 
+/**
+ * Interface RouterInterface
+ * @package Pentagonal\Profier\Interfaces
+ */
 interface RouterInterface extends \ArrayAccess, \Countable, \IteratorAggregate
 {
     public function add(array $container);

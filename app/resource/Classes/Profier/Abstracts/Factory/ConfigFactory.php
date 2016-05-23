@@ -7,5 +7,5 @@ namespace Pentagonal\Profier\Abstracts\Factory;
  */
 abstract class ConfigFactory
 {
-
+    // @development
 }

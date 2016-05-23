@@ -1,6 +1,10 @@
 <?php
 namespace Pentagonal\Profier\Interfaces;
 
+/**
+ * Interface HookInterface
+ * @package Pentagonal\Profier\Interfaces
+ */
 interface HookInterface
 {
     /**

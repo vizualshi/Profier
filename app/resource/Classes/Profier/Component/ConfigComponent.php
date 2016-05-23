@@ -1,5 +1,5 @@
 <?php
-namespace Pentagonal\Profier;
+namespace Pentagonal\Profier\Component;
 
 use Pentagonal\Profier\Abstracts\Factory\ConfigFactory;
 
@@ -7,7 +7,7 @@ use Pentagonal\Profier\Abstracts\Factory\ConfigFactory;
  * Class Config
  * @package Pentagonal\Profier
  */
-class Config extends ConfigFactory
+class ConfigComponent extends ConfigFactory
 {
-
+    // annotation
 }

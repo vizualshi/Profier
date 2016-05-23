@@ -1,6 +1,10 @@
 <?php
 namespace Pentagonal\Profier\Interfaces;
 
+/**
+ * Interface LogInterface
+ * @package Pentagonal\Profier\Interfaces
+ */
 interface LogInterface
 {
     public function info($object, $context = []);
