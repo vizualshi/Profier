@@ -27,7 +27,10 @@ abstract class InputFactory
         foreach (Headers::createFromEnvironment(Environment::create($_SERVER)) as $item) {
             $headers[$item['originalKey']] = reset($item['value']);
         };
-
+        if (!isset($_SERVER['REQUEST_TIME_FLOAT'])) {
+            $_SERVER['REQUEST_TIME_FLOAT'] = microtime(true);
+            $_SERVER['REQUEST_TIME'] = round($_SERVER['REQUEST_TIME_FLOAT']);
+        }
         $this->record = new Collector(
             [
                 '_SERVER' => new ArrayStringParser($_SERVER),

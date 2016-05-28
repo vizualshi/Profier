@@ -128,6 +128,9 @@ class LogComponent implements LogInterface
         $err = array_merge($default, $message);
         if (is_string($err['message'])) {
             $err['type'] = !isset(self::$levels[$err['type']]) ? $default['type'] : $err['type'];
+            $err['file'] = $err['file'] == '' || !is_string($err['file'])
+                || trim($err['file']) == '' || !is_file($err['file'])
+                ? '' : $err['file'];
             if (is_numeric($err['line'])) {
                 $err['line'] = abs($err['line']);
                 if (!is_int($err['line'])) {
@@ -145,7 +148,7 @@ class LogComponent implements LogInterface
     protected function putIntoLog(array $message)
     {
         if ($message = $this->sanitizeMessageArray($message)) {
-            $type = !isset(self::$levels[$message['type']]) ? 'UNKNOWN' : $message['type'];
+            $type = !isset(self::$levels[$message['type']]) ? 'UNKNOWN' : self::$levels[$message['type']];
             if ($this->logs->has($type)) {
                 $exception  = new ProfierException($message['message'], null);
                 $exception->setFile($message['file']);
@@ -202,7 +205,7 @@ class LogComponent implements LogInterface
     {
         foreach ($this->logs as $key => $value) {
             foreach ($value as $k => $v) {
-                $this->writer->write($v['exception']);
+                $this->writer->write($v);
                 $this->logged[$key]->set($k, $v);
                 $value->remove($k);
             }

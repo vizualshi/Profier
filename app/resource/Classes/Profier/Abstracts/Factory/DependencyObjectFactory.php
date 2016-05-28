@@ -1,4 +1,8 @@
 <?php
+/**
+ * Dependency Collector data injection
+ * @package Pentagonal\Profier\Abstracts\Factory
+ */
 namespace Pentagonal\Profier\Abstracts\Factory;
 
 use ArrayAccess;
@@ -6,6 +10,8 @@ use Countable;
 use IteratorAggregate;
 use ArrayIterator;
 use Pentagonal\Profier\Collector;
+use Pentagonal\Profier\Component\CallableReconstructComponent;
+use Pentagonal\Profier\Component\LogComponent;
 
 /**
  * Class DependencyObject - record object dependency and serve into as application
@@ -18,22 +24,22 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
     /**
      * @var \Pentagonal\Profier\Collector
      */
-    protected static $data;
+    private static $data;
 
     /**
      * @var \Pentagonal\Profier\Collector
      */
-    protected static $protectedName;
+    private static $protectedName;
 
     /**
      * @var null|string
      */
-    protected static $currentKey;
+    private static $currentKey;
 
     /**
      * @var array
      */
-    protected static $removedApp = [];
+    private static $removedApp = [];
 
     /**
      * @var \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory
@@ -41,18 +47,56 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
     private static $instance;
 
     /**
+     * Prefix allowed Protected Name
+     * @var \Pentagonal\Profier\Collector
+     */
+    private static $prefixProtectedName;
+
+    /**
      * \Pentagonal\Profier\Factory\DependencyObject constructor.
      * @final
      */
     final public function __construct()
+    {
+        $this->initialConstruct();
+    }
+
+    final protected function initialConstruct()
     {
         // prevent multiple set
         if (!is_object(self::$instance)) {
             self::$instance = $this;
             self::$data = new Collector();
             self::$protectedName = new Collector();
-            $this->init();
+            self::$prefixProtectedName = new Collector();
+            // set default
+            $this->setPrefixAllowedProtected('system');
+            // add logs
+            $this
+                ->set(
+                    'system.log',
+                    function () {
+                        return new LogComponent();
+                    }
+                )
+                ->set('system.app', $this)
+                ->protectDependency(['system.log', 'system.app'])
+                ->init();
         }
+
+        return $this;
+    }
+
+    /**
+     * @param string $key
+     * @return null|string
+     */
+    final public static function trimName($key)
+    {
+        if (is_string($key)) {
+            return trim($key);
+        }
+        return null;
     }
 
     /**
@@ -75,18 +119,210 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
     abstract protected function init();
 
     /**
+     * @param string          $name     the name of object
+     * @param object|callable $callable object of values
+     *
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance of
+     */
+    public static function register($name, $callable)
+    {
+        $Instance = self::getInstance();
+        return $Instance->set($name, $callable);
+    }
+
+    /**
+     * @param string          $name     the name of object
+     * @param object|callable $callable object of values
+     *
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance of
+     */
+    final public function set($name, $callable)
+    {
+        if (!is_object($callable) && !is_callable($callable)) {
+            throw new \InvalidArgumentException('Parameter 2 must be callable!');
+        }
+
+        // trim app
+        $name = $this->trimName($name);
+        if (!$name) {
+            throw new \InvalidArgumentException('Parameter 1 of application name must be as string and Could not be empty!');
+        }
+        if ($this->isProtected($name)) {
+            trigger_error(
+                sprintf('Could not override protected dependency of \'%s\'', $name),
+                E_USER_NOTICE
+            );
+            return $this;
+        }
+        $this->getObjectData()->set(
+            $name,
+            [
+                'raw'  => false,
+                'data' => (!is_object($callable) ? new CallableReconstructComponent($callable, $this) : $callable)
+            ]
+        );
+
+        self::$currentKey = $name;
+        return $this;
+    }
+
+    /**
      * @param  string $key
      * @param  mixed  $default default returning if not exist
      * @return mixed
      */
-    public static function getDependency($key, $default = null)
+    final public function getDependency($key, $default = null)
     {
-        if (!is_string($key)) {
+        $key = $this->trimName($key);
+        if (empty($key)) {
             return $default;
         }
-        $key = trim($key);
+        if ($this->has($key)) {
+            $retrieve = $this->getObjectData()->retrieve($key, $default);
+            if ($retrieve === $default) {
+                return $default;
+            }
+            if (!empty($retrieve['raw'])
+                || ! $retrieve['data'] instanceof \Closure && (
+                    is_object($retrieve['data'])
+                    || !method_exists($retrieve['data'], '__invoke')
+                )
+            ) {
+                $retrieve['raw'] = true;
+                return $retrieve['data'];
+            }
+
+            $retrieve['raw'] = true;
+            $retrieve['data'] = $retrieve['data']($this);
+            return $retrieve['data'];
+        }
+
+        return $default;
+    }
+
+    /**
+     * @param  string $key
+     * @param  mixed  $default default returning if not exist
+     * @return mixed
+     */
+    public static function dependency($key, $default = null)
+    {
         $Instance = self::getInstance();
-        return $Instance::$data->retrieve($key, $default);
+        return $Instance->getObjectData()->retrieve($key, $default);
+    }
+
+
+    /**
+     * @return \Pentagonal\Profier\Collector
+     */
+    final protected function getObjectData()
+    {
+        return self::$data;
+    }
+
+    /**
+     * @return \Pentagonal\Profier\Collector
+     */
+    final protected static function objectData()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getObjectData();
+    }
+
+    /**
+     * @return \Pentagonal\Profier\Collector
+     */
+    final protected function getObjectProtected()
+    {
+        return self::$protectedName;
+    }
+
+    /**
+     * @return \Pentagonal\Profier\Collector
+     */
+    final protected static function objectProtected()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getObjectProtected();
+    }
+
+    /**
+     * @return \Pentagonal\Profier\Collector
+     */
+    final protected function getObjectPrefixProtected()
+    {
+        return self::$prefixProtectedName;
+    }
+
+    /**
+     * @return \Pentagonal\Profier\Collector
+     */
+    protected static function objectPrefixProtected()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getObjectPrefixProtected();
+    }
+
+    /**
+     * @param string $key
+     *
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance
+     */
+    final public static function setPrefixAllowedProtected($key)
+    {
+        $instance = self::getInstance();
+        $key = self::trimName($key);
+        if (!$key) {
+            return $instance;
+        }
+
+        $instance->getObjectPrefixProtected()->set($key, true);
+        return $instance;
+    }
+
+    /**
+     * @param string $key
+     * @return bool|null
+     */
+    protected function isAllowedProtect($key)
+    {
+        if (!$this->has($key)) {
+            return null;
+        }
+        $protected = $this->getObjectPrefixProtected();
+        if ($protected->count() === 0) {
+            return true;
+        }
+        $key = explode('.', $key);
+        array_pop($key);
+        if (count($key) < 1) {
+            return false;
+        }
+        /**
+         * Doing Loop
+         * When contains as alowed protect
+         */
+        while (count($key)) {
+            if ($protected->has(implode('.', $key))) {
+                return true;
+            }
+            array_pop($key);
+        }
+
+        return false;
+    }
+
+    /**
+     * @param string $name the name of object
+     * @return bool
+     */
+    final public function has($name)
+    {
+        $name = $this->trimName($name);
+        if (empty($name)) {
+            return false;
+        }
+        return $this->getObjectData()->has($name);
     }
 
     /**
@@ -95,213 +331,135 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public static function exist($key)
     {
-        if (!is_string($key)) {
-            return false;
-        }
-        $key = trim($key);
         $Instance = self::getInstance();
-        return $Instance::$data->has($key);
+        return $Instance->has($key);
     }
 
     /**
      * @param string $key the name of object
-     * @return bool
+     * @return bool|null
+     */
+    final public function hasProtected($key)
+    {
+        if (!$this->has($key)) {
+            return null;
+        }
+        return $this->getObjectProtected()->has(trim($key));
+    }
+
+    /**
+     * @param string $key the name of object
+     * @return bool|null
      */
     public static function isProtected($key)
     {
-        if (!is_string($key)) {
-            return false;
+        $Instance = self::getInstance();
+        return $Instance->hasProtected($key);
+    }
+
+    /**
+     * @param string|null|array $key
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance of
+     */
+    final public function protectDependency($key = null)
+    {
+        if (is_array($key)) {
+            foreach ($key as $k) {
+                if (is_string($k)) {
+                    $this->protectDependency($k);
+                }
+            }
+
+            return $this;
         }
-        return self::exist($key) && self::$protectedName->has($key);
+
+        if ($key === null) {
+            $key = $this->getCurrentName();
+        }
+        if (!$this->isAllowedProtect($key)) {
+//            $this
+//                ->get('system.log')
+//                ->debug(
+//                    sprintf('Application Name : \'%s\' does not allow to be protect', $key)
+//                );
+            return $this;
+        }
+        if ($this->isProtected($key) !== false) {
+//            $this
+//                ->get('system.log')
+//                ->debug(
+//                    sprintf('Application Name : \'%s\' does not exists or has been protected before!', $key)
+//                );
+            return $this;
+        }
+
+        $this->getObjectProtected()->set($key, true);
+        return $this;
     }
 
     /**
      * @param string|null $key
-     * @return DependencyObjectFactory
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance of
      */
-    public static function protectDependency($key = null)
+    public static function protect($key = null)
     {
         $Instance = self::getInstance();
-        if ($key === null) {
-            $key = $Instance::getCurrentName();
-        }
-        if (!self::isProtected($key) && self::exist($key)) {
-            $Instance::$protectedName->set($key, true);
-        }
-        return $Instance;
-    }
-
-    /**
-     * @param string $name      the name of object
-     * @param object $callable  object of values
-     *
-     * @return DependencyObjectFactory extends
-     */
-    public static function register($name, $callable)
-    {
-        if (!is_object($callable)) {
-            throw new \InvalidArgumentException('Parameter 2 must be object callable!');
-        }
-        if (!is_string($name)) {
-            throw new \InvalidArgumentException('Parameter 1 of Application Name must be as string callable!');
-        }
-        // trim app
-        $name = trim($name);
-        $Instance = self::getInstance();
-        if (self::isProtected($name)) {
-            trigger_error('Could not override protected dependency', E_USER_NOTICE);
-            return $Instance;
-        }
-        $Instance::$data->set($name, $callable);
-        self::$currentKey = $name;
-        return $Instance;
+        return $Instance->protectDependency($key);
     }
 
     /**
      * @param string $key
      *
-     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory static extends
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance of
      */
     public static function unregister($key)
     {
         $Instance = self::getInstance();
-        if (self::isProtected($key)) {
+        return $Instance->remove($key);
+    }
+
+    /**
+     * @param string $key
+     *
+     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory instance of
+     */
+    final public function remove($key)
+    {
+        $key = $this->trimName($key);
+        if (!$key) {
+            trigger_error(
+                'Invalid Key name dependency,  application name must be as string and Could not be empty',
+                E_USER_NOTICE
+            );
+            return $this;
+        }
+        if ($this->isProtected($key) === true) {
             trigger_error('Could not unregister protected dependency', E_USER_NOTICE);
-            return $Instance;
+            return $this;
         }
-        $key = trim($key);
-        $Instance::$data->removeElement($key);
-        if ($key == self::$currentKey) {
-            $keys = $Instance::$data->getKeys();
-            if (!empty($keys)) {
-                self::$currentKey = end($keys);
-            } else {
-                self::$currentKey = null;
+        if ($this->getObjectData()->remove($key) !== null) {
+            if ($key == $this->getCurrentName()) {
+                $keys = $this->getObjectData()->last();
+                self::$currentKey = $keys ? $keys : null;
             }
+            self::$removedApp[$key] = time();
         }
 
-        self::$removedApp[] = $key;
-        return $Instance;
+        return $this;
     }
 
     /**
      * @param mixed $default
      * @return mixed
      */
-    public static function getCurrent($default = null)
+    public function getCurrent($default = null)
     {
-        if (self::$currentKey != null && self::exist(self::$currentKey)) {
-            return self::getDependency(self::$currentKey);
+        $current = $this->getCurrentName();
+        if ($current != null && $this->has($current)) {
+            return $this->getDependency($current);
         }
 
         return $default;
-    }
-
-    /**
-     * @param mixed $default
-     * @return mixed
-     */
-    public static function getNext($default = null)
-    {
-        $current = self::getCurrentName();
-        if ($current) {
-            $Instance = self::getInstance();
-            $keys = $Instance::getKeys();
-            $keyCurrent = array_search($current, $keys, true);
-            if (!is_int($keyCurrent)) {
-                return $default;
-            }
-            if (isset($keys[$keyCurrent+1]) && ! self::exist($keys[$keyCurrent+1])) {
-                return $default;
-            }
-            return self::get($keys[$keyCurrent], $default);
-        }
-        return $default;
-    }
-
-    /**
-     * @param mixed $default
-     * @return mixed
-     */
-    public static function getPrev($default = null)
-    {
-        $current = self::getCurrentName();
-        if ($current) {
-            $Instance = self::getInstance();
-            $keys = $Instance::getKeys();
-            $keyCurrent = array_search($current, $keys, true);
-            if (!is_int($keyCurrent)) {
-                return $default;
-            }
-            if (isset($keys[$keyCurrent-1]) && ! self::exist($keys[$keyCurrent-1])) {
-                return $default;
-            }
-            return self::get($keys[$keyCurrent-1], $default);
-        }
-        return $default;
-    }
-
-    /**
-     * @return array|Collector
-     */
-    public static function getProtectedName()
-    {
-        return self::$protectedName->toArray();
-    }
-
-    /**
-     * @return null|string
-     */
-    public static function getCurrentName()
-    {
-        return self::$currentKey;
-    }
-
-    /**
-     * @return array
-     */
-    public static function getKeys()
-    {
-        return self::$data->getKeys();
-    }
-
-    /**
-     * @return array
-     */
-    public static function getAll()
-    {
-        return self::$data->toArray();
-    }
-
-    /**
-     * @param string $key
-     * @param object $object
-     *
-     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory static extends
-     */
-    public static function set($key, $object)
-    {
-        return self::register($key, $object);
-    }
-
-    /**
-     * @param string $key
-     * @param mixed $default
-     * @return mixed
-     */
-    public static function get($key, $default = null)
-    {
-        return self::getDependency($key, $default);
-    }
-
-    /**
-     * @param string $key
-     *
-     * @return \Pentagonal\Profier\Abstracts\Factory\DependencyObjectFactory static extends
-     */
-    public static function remove($key)
-    {
-        return self::unregister($key);
     }
 
     /**
@@ -310,7 +468,29 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public static function current($default= null)
     {
-        return self::getCurrent($default);
+        $Instance = self::getInstance();
+        return $Instance->getCurrent($default);
+    }
+
+    /**
+     * @param mixed $default
+     * @return mixed
+     */
+    final public function getNext($default = null)
+    {
+        $current = $this->getCurrentName();
+        if ($current) {
+            $keys = $this->getKeys();
+            $keyCurrent = array_search($current, $keys, true);
+            if (!is_int($keyCurrent)) {
+                return $default;
+            }
+            if (isset($keys[$keyCurrent+1]) && ! $this->has($keys[$keyCurrent+1])) {
+                return $default;
+            }
+            return $this->getDependency($keys[$keyCurrent], $default);
+        }
+        return $default;
     }
 
     /**
@@ -319,7 +499,30 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public static function next($default= null)
     {
-        return self::getNext($default);
+        $Instance = self::getInstance();
+        return $$Instance->getNext($default);
+    }
+
+    /**
+     * @param mixed $default
+     * @return mixed
+     */
+    final public function getPrev($default = null)
+    {
+        $current = $this->getCurrentName();
+        if ($current) {
+            $keys = $this->getKeys();
+            $keyCurrent = array_search($current, $keys, true);
+            if (!is_int($keyCurrent)) {
+                return $default;
+            }
+            if (isset($keys[$keyCurrent-1]) && ! $this->has($keys[$keyCurrent-1])) {
+                return $default;
+            }
+            return $this->getDependency($keys[$keyCurrent-1], $default);
+        }
+
+        return $default;
     }
 
     /**
@@ -328,17 +531,89 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public static function prev($default= null)
     {
-        return self::getPrev($default);
+        $Instance = self::getInstance();
+        return $Instance->getPrev($default);
     }
 
     /**
-     * @param string $name
-     * @return bool
+     * @return array|Collector
      */
-    public static function has($name)
+    final public function getProtectedName()
     {
-        return self::exist($name);
+        return self::$protectedName->toArray();
     }
+
+    /**
+     * @return array|Collector
+     */
+    public static function protectedName()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getProtectedName();
+    }
+
+    /**
+     * @return null|string
+     */
+    final public function getCurrentName()
+    {
+        return self::$currentKey;
+    }
+
+    public static function currentName()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getCurrentName();
+    }
+
+    /**
+     * @return array
+     */
+    final public function getKeys()
+    {
+        return $this
+            ->getObjectData()
+            ->getKeys();
+    }
+
+    /**
+     * @return array
+     */
+    public static function keys()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getKeys();
+    }
+
+    /**
+     * @return array
+     */
+    final public function getAll()
+    {
+        return $this
+            ->getObjectData()
+            ->toArray();
+    }
+
+    /**
+     * @return array
+     */
+    public static function all()
+    {
+        $Instance = self::getInstance();
+        return $Instance->getAll();
+    }
+
+    /**
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    final public function get($key, $default = null)
+    {
+        return $this->getDependency($key, $default);
+    }
+
 
     /**
      * Required by interface ArrayAccess.
@@ -351,7 +626,7 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function offsetExists($offset)
     {
-        return self::has($offset);
+        return $this->has($offset);
     }
 
     /**
@@ -365,7 +640,7 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function offsetGet($offset)
     {
-        return self::getDependency($offset);
+        return $this->get($offset);
     }
 
     /**
@@ -380,7 +655,7 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function offsetSet($offset, $value)
     {
-        return self::register($offset, $value);
+        return $this->set($offset, $value);
     }
 
     /**
@@ -394,7 +669,7 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function offsetUnset($offset)
     {
-        return self::remove($offset);
+        return $this->remove($offset);
     }
 
     /**
@@ -404,10 +679,9 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function __set($name, $value)
     {
-        if (!self::isProtected($name) && is_object($value)) {
+        if (!$this->hasProtected($name) && is_object($value)) {
             return self::set($name, $value);
         }
-
         $this->$name = $value;
         return null;
     }
@@ -421,7 +695,7 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function getIterator()
     {
-        return new ArrayIterator(self::$data);
+        return new ArrayIterator($this->getObjectData());
     }
 
     /**
@@ -442,14 +716,36 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public function __get($name)
     {
-        if (self::exist($name)) {
-            return self::getDependency($name);
+        if ($this->has($name)) {
+            return $this->getDependency($name);
         }
         return property_exists($this, $name) ? $this->$name : null;
     }
 
     /**
+     * [NOTE] arguments will be ignored!
+     *
+     * @param string $name
+     * @param array  $arguments
+     * @return mixed
+     * @throws \Exception
+     */
+    public function __call($name, $arguments)
+    {
+        if ($this->has($name)) {
+            return $this->getDependency($name);
+        }
+        throw new \Exception(
+            sprintf(
+                'Call to undefined method %s',
+                $name
+            )
+        );
+    }
+
+    /**
      * Magic Method Calling Static Method
+     * [NOTE] arguments will be ignored!
      *
      * @param string $name
      * @param array $arguments
@@ -458,15 +754,8 @@ abstract class DependencyObjectFactory implements ArrayAccess, IteratorAggregate
      */
     public static function __callStatic($name, $arguments)
     {
-        if (self::has($name)) {
-            array_unshift($arguments, $name);
-            return call_user_func_array(
-                [
-                    self::getInstance(),
-                    'get'
-                ],
-                $arguments
-            );
+        if (self::exist($name)) {
+            return self::dependency($name);
         }
         throw new \Exception(
             sprintf(

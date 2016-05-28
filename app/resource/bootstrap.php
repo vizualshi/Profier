@@ -3,32 +3,21 @@
  * PSR0 autoloader
  */
 return spl_autoload_register(function ($className) {
-    $baseDir = __DIR__ . '/Classes/Profier/';
-    $prefix = 'Pentagonal\\Profier\\';
-    // does the class use the namespace prefix?
-    $len = strlen($prefix);
     $className = ltrim($className, '\\');
-    if (strncmp($prefix, $className, $len) !== 0) {
-        // no, move to the next registered autoloader
+    $nameSpace = 'Pentagonal\\Profier\\';
+    $baseDir = __DIR__ . '/Classes/Profier/';
+    if (stripos($className, $nameSpace) !== 0) {
+        // continue to next auto loader
         return;
     }
-    // strip the string
-    $className = substr($className, $len);
-    if ($lastNsPos = strripos($className, '\\')) {
-        $namespace = str_replace('\\', '/', $className);
-        $namespace = substr($namespace, 0, $lastNsPos);
-        $className = substr($className, $lastNsPos + 1);
-        if (!is_dir($baseDir. $namespace . '/')) {
-            // if no match
-            return;
-        }
-        $baseDir .= $namespace . '/';
-    }
-    /**
-     * Fix File for
-     */
-    if (file_exists($baseDir . $className . '.php')) {
-        /** @noinspection PhpIncludeInspection */
-        require_once($baseDir . $className . '.php');
+    $classFile = str_replace('\\', '/', substr($className, strlen($nameSpace)));
+    $classFile = $baseDir . $classFile . '.php';
+    if (file_exists($classFile)) {
+        /**
+         * Call stack
+         */
+        call_user_func(function () {
+            require_once func_get_arg(0);
+        }, $classFile);
     }
 }, true);

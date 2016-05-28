@@ -21,15 +21,23 @@ class App extends DependencyObjectFactory
          * register Application Collection & protect it
          */
         $this
-            ->register('system.app', $this)
-            ->protectDependency()
-            ->register('system.input', new Input())
-            ->protectDependency()
-            ->register('system.hook', new Hooks())
-            ->protectDependency()
-            ->register('system.config', new ConfigComponent())
-            ->protectDependency()
-            ->register('system.route.callable', new Collector())
-            ->protectDependency();
+            ->register('system.input', function () {
+                return new Input();
+            })
+            ->register('system.hook', function () {
+                return new Hooks();
+            })
+            ->register('system.config', function () {
+                return new ConfigComponent();
+            })
+            ->register('system.route.callable', function () {
+                new Collector();
+            })
+            ->protectDependency([
+                'system.input',
+                'system.hook',
+                'system.config',
+                'system.route.callable'
+            ]);
     }
 }

@@ -27,12 +27,12 @@ class RouteComponent extends RouterAbstract
      */
     public function __construct($name, $route, $callable, $method = null)
     {
-        if (!App::has('system.route.callable')) {
+        if (!App::exist('system.route.callable')) {
             App::register('system.route.callable', new Collector())->protectDependency();
-        } elseif (!App::get('system.route.callable') instanceof Collector) {
+        } elseif (!App::exist('system.route.callable') instanceof Collector) {
             throw new \ErrorException('Pre Reserved Application `system.route.callable` has been set with non standard object');
         }
-        $this->collector = App::get('system.route.callable');
+        $this->collector = App::dependency('system.route.callable');
         $this->name = $this->sanitizeName($name);
         $this->setRoute($route);
         $this->setCallable($callable);
